@@ -17,6 +17,7 @@ use Filament\Forms\Set;
 use Filament\Resources\Pages\PageRegistration;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Resources\Resource;
+use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\CreateAction;
 use Filament\Tables\Actions\DeleteBulkAction;
 use Filament\Tables\Actions\EditAction;
@@ -86,6 +87,12 @@ class DatabaseHostResource extends Resource
             ])
             ->checkIfRecordIsSelectableUsing(fn (DatabaseHost $databaseHost) => !$databaseHost->databases_count)
             ->actions([
+                Action::make('manage_database')
+                    ->label('Manage')
+                    ->icon('tabler-database-cog')
+                    ->color('primary')
+                    ->url(fn (DatabaseHost $record) => static::getUrl('manage', ['record' => $record->id]))
+                    ->openUrlInNewTab(),
                 ViewAction::make()
                     ->hidden(fn ($record) => static::canEdit($record)),
                 EditAction::make(),
@@ -178,6 +185,7 @@ class DatabaseHostResource extends Resource
             'create' => Pages\CreateDatabaseHost::route('/create'),
             'view' => Pages\ViewDatabaseHost::route('/{record}'),
             'edit' => Pages\EditDatabaseHost::route('/{record}/edit'),
+            'manage' => Pages\ManageDatabaseHost::route('/{record}/manage'),
         ];
     }
 
