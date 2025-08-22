@@ -86,6 +86,8 @@ class Node extends Model implements Validatable
         'upload_size', 'daemon_base',
         'daemon_sftp', 'daemon_sftp_alias', 'daemon_listen', 'daemon_connect',
         'description', 'maintenance_mode', 'tags',
+        'cpu_warning_threshold', 'memory_warning_threshold', 'disk_warning_threshold',
+        'last_resource_check', 'has_resource_warnings',
     ];
 
     /** @var array<array-key, string[]> */
@@ -110,6 +112,10 @@ class Node extends Model implements Validatable
         'maintenance_mode' => ['boolean'],
         'upload_size' => ['int', 'between:1,1024'],
         'tags' => ['array'],
+        'cpu_warning_threshold' => ['numeric', 'min:0', 'max:100'],
+        'memory_warning_threshold' => ['numeric', 'min:0', 'max:100'],
+        'disk_warning_threshold' => ['numeric', 'min:0', 'max:100'],
+        'has_resource_warnings' => ['boolean'],
     ];
 
     /**
@@ -146,6 +152,11 @@ class Node extends Model implements Validatable
             'public' => 'boolean',
             'maintenance_mode' => 'boolean',
             'tags' => 'array',
+            'cpu_warning_threshold' => 'decimal:2',
+            'memory_warning_threshold' => 'decimal:2',
+            'disk_warning_threshold' => 'decimal:2',
+            'last_resource_check' => 'datetime',
+            'has_resource_warnings' => 'boolean',
         ];
     }
 
@@ -396,5 +407,107 @@ class Node extends Model implements Validatable
 
             return $ips->unique()->all();
         });
+    }
+
+    /**
+     * Check current resource usage against warning thresholds
+     * 
+     * @return array<string, mixed>
+     */
+    public function checkResourceWarnings(): array
+    {
+        $stats = $this->statistics();
+        $warnings = [];
+
+        // CPU Warning
+        if ($stats['cpu_percent'] >= $this->cpu_warning_threshold) {
+            $warnings[] = [
+                'type' => 'cpu',
+                'message' => "CPU usage is {$stats['cpu_percent']}% (threshold: {$this->cpu_warning_threshold}%)",
+                'current' => $stats['cpu_percent'],
+                'threshold' => $this->cpu_warning_threshold,
+                'severity' => $this->getWarningSeverity($stats['cpu_percent'], $this->cpu_warning_threshold),
+            ];
+        }
+
+        // Memory Warning
+        $memoryPercent = $stats['memory_total'] > 0 ? ($stats['memory_used'] / $stats['memory_total']) * 100 : 0;
+        if ($memoryPercent >= $this->memory_warning_threshold) {
+            $warnings[] = [
+                'type' => 'memory',
+                'message' => "Memory usage is " . number_format($memoryPercent, 1) . "% (threshold: {$this->memory_warning_threshold}%)",
+                'current' => $memoryPercent,
+                'threshold' => $this->memory_warning_threshold,
+                'severity' => $this->getWarningSeverity($memoryPercent, $this->memory_warning_threshold),
+            ];
+        }
+
+        // Disk Warning  
+        $diskPercent = $stats['disk_total'] > 0 ? ($stats['disk_used'] / $stats['disk_total']) * 100 : 0;
+        if ($diskPercent >= $this->disk_warning_threshold) {
+            $warnings[] = [
+                'type' => 'disk',
+                'message' => "Disk usage is " . number_format($diskPercent, 1) . "% (threshold: {$this->disk_warning_threshold}%)",
+                'current' => $diskPercent,
+                'threshold' => $this->disk_warning_threshold,
+                'severity' => $this->getWarningSeverity($diskPercent, $this->disk_warning_threshold),
+            ];
+        }
+
+        // Update warning status
+        $hasWarnings = !empty($warnings);
+        if ($this->has_resource_warnings !== $hasWarnings) {
+            $this->update([
+                'has_resource_warnings' => $hasWarnings,
+                'last_resource_check' => now(),
+            ]);
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * Get warning severity level
+     */
+    private function getWarningSeverity(float $current, float $threshold): string
+    {
+        $overThreshold = $current - $threshold;
+        
+        if ($overThreshold >= 15) {
+            return 'critical';
+        } elseif ($overThreshold >= 5) {
+            return 'high';
+        } else {
+            return 'medium';
+        }
+    }
+
+    /**
+     * Check if node has active resource warnings
+     */
+    public function hasResourceWarnings(): bool
+    {
+        return !empty($this->checkResourceWarnings());
+    }
+
+    /**
+     * Get formatted warning summary for display
+     */
+    public function getResourceWarningsSummary(): string
+    {
+        $warnings = $this->checkResourceWarnings();
+        
+        if (empty($warnings)) {
+            return '';
+        }
+
+        $types = array_column($warnings, 'type');
+        $count = count($warnings);
+        
+        if ($count === 1) {
+            return ucfirst($types[0]) . ' usage high';
+        }
+        
+        return $count . ' resource warnings';
     }
 }
