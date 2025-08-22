@@ -36,9 +36,11 @@ class ListNodes extends ListRecords
                 NodeHealthColumn::make('health'),
                 TextColumn::make('name')
                     ->label(trans('admin/node.table.name'))
-                    ->icon('tabler-server-2')
+                    ->icon(fn (Node $node) => $node->hasResourceWarnings() ? 'tabler-alert-triangle' : 'tabler-server-2')
+                    ->iconColor(fn (Node $node) => $node->hasResourceWarnings() ? 'warning' : 'gray')
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->description(fn (Node $node) => $node->getResourceWarningsSummary()),
                 TextColumn::make('fqdn')
                     ->visibleFrom('md')
                     ->label(trans('admin/node.table.address'))
@@ -62,6 +64,15 @@ class ListNodes extends ListRecords
                     ->label(trans('admin/node.table.servers'))
                     ->sortable()
                     ->icon('tabler-brand-docker'),
+                
+                IconColumn::make('has_resource_warnings')
+                    ->label('Warnings')
+                    ->boolean()
+                    ->trueIcon('tabler-alert-triangle')
+                    ->falseIcon('tabler-check')
+                    ->trueColor('warning')
+                    ->falseColor('success')
+                    ->tooltip(fn (Node $node) => $node->hasResourceWarnings() ? $node->getResourceWarningsSummary() : 'No resource warnings'),
             ])
             ->actions([
                 EditAction::make(),
