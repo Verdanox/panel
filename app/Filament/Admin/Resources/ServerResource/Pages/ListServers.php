@@ -49,7 +49,8 @@ class ListServers extends ListRecords
                     ->label(trans('admin/server.name'))
                     ->icon('tabler-brand-docker')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->description(fn (Server $server) => "Memory: {$server->memory}MB | CPU: {$server->cpu}% | Disk: {$server->disk}MB"),
                 TextColumn::make('node.name')
                     ->label(trans('admin/server.node'))
                     ->icon('tabler-server-2')
@@ -85,6 +86,25 @@ class ListServers extends ListRecords
                     ->disabled(fn (Server $server) => $server->allocations->count() <= 1)
                     ->state(fn (Server $server) => $server->allocation->address ?? 'None'),
                 TextColumn::make('image')->hidden(),
+                TextColumn::make('total_resources')
+                    ->label('Resources')
+                    ->state(fn (Server $server) => $server->memory + $server->disk + $server->cpu)
+                    ->formatStateUsing(fn ($state, Server $server) => 
+                        "Mem: {$server->memory}MB, CPU: {$server->cpu}%, Disk: {$server->disk}MB"
+                    )
+                    ->sortable(query: function ($query, string $direction) {
+                        return $query->orderByRaw("(memory + disk + cpu) {$direction}");
+                    })
+                    ->badge()
+                    ->color('gray'),
+                    
+                TextColumn::make('created_at')
+                    ->label('Created')
+                    ->dateTime()
+                    ->sortable()
+                    ->since()
+                    ->icon('tabler-calendar'),
+                    
                 TextColumn::make('backups_count')
                     ->counts('backups')
                     ->label(trans('admin/server.backups'))
